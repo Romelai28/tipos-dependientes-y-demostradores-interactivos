@@ -4,12 +4,12 @@
 ----
 
 open import Relation.Binary.PropositionalEquality using (_≡_; refl; sym; trans; cong)
-open import Data.Empty using (⊥-elim)
+open import Data.Empty using (⊥; ⊥-elim)
 open import Data.List using (List; []; _∷_)
-open import Data.Product using (_×_; Σ-syntax; _,_)
+open import Data.Product using (_×_; Σ-syntax; _,_; proj₁; proj₂)
 open import Data.Sum using (_⊎_; inj₁; inj₂)
 open import Data.Nat using (ℕ; zero; suc; _+_; _≤_; _≟_)
-open import Data.Nat.Properties using (≤-step; ≤-refl; ≤-trans; +-monoʳ-≤)
+open import Data.Nat.Properties using (≤-step; ≤-refl; ≤-trans; +-monoʳ-≤; ≤-pred)
 open import Relation.Nullary using (Dec; yes; no; ¬_)
 
 -- Recordemos la definición de algunas funciones básicas sobre listas:
@@ -35,7 +35,28 @@ reverse (x ∷ xs) = reverse xs ++ (x ∷ [])
 split : {A : Set} (xs : List A) (k : ℕ)
       → k ≤ length xs
       → Σ[ ys ∈ List A ] Σ[ zs ∈ List A ] ((xs ≡ ys ++ zs) × k ≡ length ys)
-split = {!!}
+split {A} []        zero k≤length_xs = [] , [] , refl , refl
+split {A} (x ∷ xs) zero k≤length_xs = [] , (x ∷ xs) , refl , refl
+split {A} (x ∷ xs) (suc k) k≤length_xs with split {A} xs k (≤-pred k≤length_xs)
+... | ys , zs , (p1 , p2) = x ∷ ys ,
+                            zs ,
+                            cong (λ l → x ∷ l) p1 ,
+                            cong suc p2
+
+{-
+-- Sin usar pattern matching sobre el resultado de rec:
+split : {A : Set} (xs : List A) (k : ℕ)
+      → k ≤ length xs
+      → Σ[ ys ∈ List A ] Σ[ zs ∈ List A ] ((xs ≡ ys ++ zs) × k ≡ length ys)
+split {A} [] zero foo = [] , [] , refl , refl
+split {A} (x ∷ xs) zero foo    = [] , (x ∷ xs) , refl , refl
+split {A} (x ∷ xs) (suc k) foo =
+  let rec = split {A} xs k (≤-pred foo) in
+    x ∷ (proj₁ rec) ,
+    proj₁ (proj₂ rec) ,
+    cong (λ l -> x ∷ l) (proj₁ (proj₂ (proj₂ rec))) ,
+    cong suc (proj₂ (proj₂ (proj₂ rec)))
+-}
 
 -- Definimos un predicado "x ∈ ys" que es verdadero si x aparece en ys:
 
@@ -46,16 +67,59 @@ data _∈_ : ℕ → List ℕ → Set where
 -- A.2) Demostrar que es posible decidir si un número natural aparece en una lista.
 -- (Usar _≟_ para decidir la igualdad de números naturales).
 
+-- Lemas auxiliares:
+nadie-pertenece-a-la-lista-vacia : {x : ℕ} → x ∈ [] → ⊥
+nadie-pertenece-a-la-lista-vacia {x} ()
+
+zero-con-prueba-de-igualdad : {x y : ℕ} {ys : List ℕ} → (p : x ≡ y) → x ∈ (y ∷ ys)
+zero-con-prueba-de-igualdad {x} {y} {ys} refl = zero
+
+∈-absurdo : {x y : ℕ} {ys : List ℕ} → (¬ x ≡ y) → ¬ x ∈ ys → x ∈ (y ∷ ys) → ⊥
+∈-absurdo {x} {y} {ys} ¬x≡y ¬x∈ys zero        = ¬x≡y refl
+∈-absurdo {x} {y} {ys} ¬x≡y ¬x∈ys (suc x∈ys) = ¬x∈ys x∈ys
+
 ∈-decidible : {x : ℕ} {ys : List ℕ} → Dec (x ∈ ys)
-∈-decidible = {!!}
+∈-decidible {x} {[]}     = no (λ x∈[] → nadie-pertenece-a-la-lista-vacia x∈[])
+∈-decidible {x} {y ∷ ys} with x ≟ y
+... | yes x≡y = yes (zero-con-prueba-de-igualdad x≡y)
+... | no ¬x≡y with ∈-decidible {x} {ys}
+... | yes x∈ys  = yes (suc x∈ys)
+... | no ¬x∈ys  = no (λ x∈y∷ys → ∈-absurdo {x} {y} {ys} ¬x≡y ¬x∈ys x∈y∷ys)
 
 -- A.3) Demostrar que la igualdad de listas es decidible
 -- asumiendo que es decidible la igualdad de sus elementos.
 
+-- Lemas auxiliares:
+head-coincide : {A : Set} {x y : A} {xs ys : List A} → (x ∷ xs ≡ y ∷ ys) → (x ≡ y)
+head-coincide {A} {x} {y} {xs} {ys} refl = refl
+
+-- Reciproco de head-coincide.
+¬x≡y⇒¬x∷xs≡y∷ys : {A : Set} {x y : A} {xs ys : List A} → (¬ x ≡ y) → ¬ (x ∷ xs ≡ y ∷ ys)
+¬x≡y⇒¬x∷xs≡y∷ys {A} {x} {y} {xs} {ys} ¬x≡y = λ x∷xs≡y∷ys → ¬x≡y (head-coincide x∷xs≡y∷ys)
+
+tail-coincide : {A : Set} {x y : A} {xs ys : List A} → (x ∷ xs ≡ y ∷ ys) → (xs ≡ ys)
+tail-coincide {A} {x} {y} {xs} {ys} refl = refl
+
+-- Reciproco de tail-coincide.
+¬xs≡ys⇒¬x∷xs≡y∷ys : {A : Set} {x y : A} {xs ys : List A} → (¬ xs ≡ ys) → ¬ (x ∷ xs ≡ y ∷ ys)
+¬xs≡ys⇒¬x∷xs≡y∷ys {A} {x} {y} {xs} {ys} ¬xs≡ys = λ x∷xs≡y∷ys → ¬xs≡ys (tail-coincide x∷xs≡y∷ys)
+
+x≡y∧xs≡ys⇒x∷xs≡y∷ys : {A : Set} {x y : A} {xs ys : List A} → (x ≡ y) → (xs ≡ ys) → (x ∷ xs ≡ y ∷ ys)
+x≡y∧xs≡ys⇒x∷xs≡y∷ys {A} {x} {y} {xs} {ys} refl refl = refl
+
+-- OBSERVACIÓN: Prodría ser interesante armarme una función reciproco para no tener código repetido.
+
 List-igualdad-decidible : {A : Set}
                         → ((x y : A) → Dec (x ≡ y))
                         → ((xs ys : List A) → Dec (xs ≡ ys))
-List-igualdad-decidible dec-eq-A xs ys = {!!}
+List-igualdad-decidible dec-eq-A [] [] = yes refl
+List-igualdad-decidible dec-eq-A (x ∷ xs) [] = no λ ()
+List-igualdad-decidible dec-eq-A [] (y ∷ ys) = no λ ()
+List-igualdad-decidible dec-eq-A (x ∷ xs) (y ∷ ys) with dec-eq-A x y
+... | no ¬x≡y = no (¬x≡y⇒¬x∷xs≡y∷ys ¬x≡y)
+... | yes x≡y with List-igualdad-decidible dec-eq-A xs ys
+... | yes xs≡ys = yes (x≡y∧xs≡ys⇒x∷xs≡y∷ys x≡y xs≡ys)
+... | no ¬xs≡ys = no (¬xs≡ys⇒¬x∷xs≡y∷ys ¬xs≡ys)
 
 ---- Parte B ----
 
