@@ -146,7 +146,8 @@ data _~_ : List ℕ → List ℕ → Set where
 -- B.1) Demostrar que "~" es reflexiva:
 
 ~-refl : {xs : List ℕ} → xs ~ xs
-~-refl = {!!}
+~-refl {[]} = ~-empty
+~-refl {x ∷ xs} = ~-cons ~-refl
 
 -- Definimos operadores auxiliares para poder hacer razonamiento ecuacional
 -- con permutaciones:
@@ -163,10 +164,10 @@ _ ~∎ = ~-refl
 -- B.2) Demostrar que "~" es simétrica:
 
 ~-sym : {xs ys : List ℕ} → xs ~ ys → ys ~ xs
-~-sym ~-empty       = {!!}
-~-sym (~-cons p)    = {!!}
-~-sym (~-swap p)    = {!!}
-~-sym (~-trans p q) = {!!}
+~-sym ~-empty       = ~-empty
+~-sym (~-cons p)    = ~-cons (~-sym p)
+~-sym (~-swap p)    = ~-swap (~-sym p)
+~-sym (~-trans p q) = ~-trans (~-sym q) (~-sym p)
 
 -- B.3) Demostrar que "~" es una congruencia con respecto a la concatenación de listas:
 
@@ -174,9 +175,23 @@ _ ~∎ = ~-refl
      → xs ~ xs'
      → ys ~ ys'
      → xs ++ ys ~ xs' ++ ys'
-~-++ p q = {!!}
+~-++ ~-empty ys~ys' = ys~ys'
+~-++ (~-cons xs~xs') ys~ys' = ~-cons (~-++ xs~xs' ys~ys')
+~-++ (~-swap xs~xs') ys~ys' = ~-swap (~-++ xs~xs' ys~ys')
+~-++ (~-trans xs~zs zs~xs') ys~ys' = ~-trans (~-++ xs~zs ys~ys') (~-++ zs~xs' ~-refl)
 
 -- B.4) Demostrar que una lista invertida es permutación de la lista original:
+
+-- Lema auxiliar:
+~-lemma-last-to-head : {x : ℕ} {xs : List ℕ} → xs ++ (x ∷ []) ~ x ∷ xs
+~-lemma-last-to-head {x} {[]} = ~-refl
+~-lemma-last-to-head {x} {y ∷ ys} =
+    y ∷ ys ++ (x ∷ [])
+  ~⟨ ~-cons {y} (~-lemma-last-to-head {x} {ys}) ⟩
+    y ∷ x ∷ ys
+  ~⟨ ~-swap ~-refl ⟩
+    x ∷ y ∷ ys
+  ~∎
 
 ~-reverse : {xs : List ℕ} → reverse xs ~ xs
 ~-reverse {[]}     = ~-empty
@@ -184,9 +199,9 @@ _ ~∎ = ~-refl
     reverse (x ∷ xs)
   ~⟨ ~-refl ⟩
     reverse xs ++ (x ∷ [])
-  ~⟨ {!!} ⟩
+  ~⟨ ~-++ {reverse xs} {x ∷ []} ~-reverse ~-refl ⟩
     xs ++ (x ∷ [])
-  ~⟨ {!!} ⟩
+  ~⟨ ~-lemma-last-to-head ⟩
     x ∷ xs
   ~∎
 
